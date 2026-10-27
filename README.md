@@ -5,7 +5,7 @@ Video downloader (yt-dlp), a built-in plugin of [LiteLaunch](https://github.com/
 `plugins/vd`.
 
 - `vd.rs`: the native part, compiled into the launcher. It checks the link and caches results per link for
-  an hour. It takes yt-dlp (and ffmpeg, if missing) from the old Flow plugin and can prewarm Python
+  an hour. If yt-dlp is missing it offers to install it with pip. It can prewarm Python
   (`prewarm`, off by default). It embeds the files below and unpacks them to `%APPDATA%\LiteLaunch\vd`.
 - `vd.py`: the worker. It speaks the Flow JSON-RPC v1 protocol, so it runs through the launcher's
   plugin machinery.

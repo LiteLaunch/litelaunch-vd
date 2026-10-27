@@ -1,20 +1,18 @@
-//! vd — video downloader (yt-dlp), replacing Flow's AnyVideo Downloader. The link is checked
+//! vd — video downloader (yt-dlp). The link is checked
 //! and results are cached here; Python (plugins/vd/vd.py) runs only to extract a link and to download.
 //! The script is embedded and unpacked to %APPDATA%\LiteLaunch\vd; yt-dlp lives in its lib.
 
 use crate::config::PluginConfig;
 use crate::pyplugin::PyResult;
 use crate::search::{Action, Item};
+use crate::util::{CREATE_NEW_CONSOLE, CREATE_NO_WINDOW, clipboard_text, expand_env};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::os::windows::process::CommandExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
 
 const FILES: &[(&str, &[u8])] = &[("vd.py", include_bytes!("vd.py")), ("icon.png", include_bytes!("icon.png"))];
 
@@ -89,55 +87,9 @@ pub fn plugin_config(cfg: &VdConfig) -> PluginConfig {
     }
 }
 
-/// The old Flow plugin's folder ("AnyVideo Downloader-2.5.2").
-pub fn flow_plugin_dir() -> Option<PathBuf> {
-    let plugins = PathBuf::from(std::env::var("APPDATA").unwrap_or_default()).join("FlowLauncher").join("Plugins");
-    std::fs::read_dir(plugins).ok()?.flatten().map(|e| e.path()).find(|p| {
-        p.file_name().is_some_and(|n| n.to_string_lossy().starts_with("AnyVideo Downloader")) && p.join("plugin.json").exists()
-    })
-}
-
-/// Unpacks the script (when changed) and, once, takes yt-dlp (and ffmpeg, if it is not on
-/// PATH) from the old Flow plugin so nothing has to be installed again.
+/// Writes the embedded script to %APPDATA%\LiteLaunch\vd (when changed).
 pub fn install() {
-    let dir = dir();
-    let _ = std::fs::create_dir_all(&dir);
-    for (name, bytes) in FILES {
-        let path = dir.join(name);
-        if std::fs::read(&path).ok().as_deref() != Some(*bytes) {
-            let _ = std::fs::write(&path, bytes);
-        }
-    }
-    let Some(flow) = flow_plugin_dir() else { return };
-    if !has_lib() && flow.join("lib").join("yt_dlp").exists() {
-        copy_dir(&flow.join("lib"), &dir.join("lib"));
-    }
-    if !dir.join("ffmpeg.exe").exists() && !on_path("ffmpeg.exe") {
-        for exe in ["ffmpeg.exe", "ffprobe.exe"] {
-            let _ = std::fs::copy(flow.join("plugin").join(exe), dir.join(exe));
-        }
-    }
-}
-
-fn copy_dir(from: &Path, to: &Path) {
-    let _ = std::fs::create_dir_all(to);
-    let Ok(entries) = std::fs::read_dir(from) else { return };
-    for e in entries.flatten() {
-        let name = e.file_name();
-        // The plugin's Flow API, yt-dlp.exe and docs are not needed.
-        if ["pyflowlauncher", "bin", "share"].iter().any(|n| name == *n) || name.to_string_lossy().starts_with("pyflowlauncher") {
-            continue;
-        }
-        if e.path().is_dir() {
-            copy_dir(&e.path(), &to.join(&name));
-        } else {
-            let _ = std::fs::copy(e.path(), to.join(&name));
-        }
-    }
-}
-
-fn on_path(exe: &str) -> bool {
-    std::env::var_os("PATH").is_some_and(|p| std::env::split_paths(&p).any(|d| d.join(exe).is_file()))
+    crate::util::unpack(&dir(), FILES);
 }
 
 pub fn has_lib() -> bool {
@@ -193,10 +145,10 @@ pub fn search(cfg: &VdConfig, q: &str, cache: &Cache) -> Found {
             Action::Vd(Op::InstallLib),
         )]);
     }
-    let folder = crate::yad::expand_env(&cfg.download_dir);
+    let folder = expand_env(&cfg.download_dir);
     let open_folder = item("Открыть папку загрузок", folder, Action::Vd(Op::OpenFolder));
     if q.is_empty() {
-        let first = match clean_url(&crate::yad::clipboard_text()) {
+        let first = match clean_url(&clipboard_text()) {
             Some(url) => item("Ссылка из буфера обмена", url.clone(), Action::SetQuery(format!("{} {url}", cfg.keyword))),
             None => item("Вставьте ссылку на видео", "YouTube, VK, Twitch, TikTok и ещё ~1800 сайтов", Action::Nothing),
         };
@@ -214,15 +166,13 @@ pub fn search(cfg: &VdConfig, q: &str, cache: &Cache) -> Found {
 pub fn run(op: &Op, cfg: &VdConfig, python: &str) {
     match op {
         Op::OpenFolder => {
-            let folder = crate::yad::expand_env(&cfg.download_dir);
+            let folder = expand_env(&cfg.download_dir);
             let _ = std::fs::create_dir_all(&folder);
             let _ = Command::new("explorer.exe").arg(folder).spawn();
         }
         Op::InstallLib => {
-            let console = python.to_lowercase().replace("pythonw.exe", "python.exe");
-            let exe = if Path::new(&console).exists() { console } else { "python".into() };
             let lib = dir().join("lib");
-            let _ = Command::new(exe)
+            let _ = Command::new(crate::util::console_python(python))
                 .args(["-m", "pip", "install", "--target"])
                 .arg(lib)
                 .arg("yt-dlp[default]")
