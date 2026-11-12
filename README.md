@@ -1,6 +1,6 @@
 # litelaunch-vd
 
-Video downloader (yt-dlp), a built-in plugin of [LiteLaunch](https://github.com/Slava-Gusak/litelaunch)
+Video downloader (yt-dlp), a built-in plugin of [LiteLaunch](https://github.com/LiteLaunch/litelaunch)
 (`vd <link>`). It replaces Flow's AnyVideo Downloader and lives in the launcher as the submodule
 `plugins/vd`.
 
