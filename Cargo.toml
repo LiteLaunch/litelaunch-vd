@@ -1,0 +1,24 @@
+[package]
+name = "vd"
+version = "1.0.0"
+edition = "2024"
+description = "Video downloader (yt-dlp) for LiteLaunch"
+license = "MIT"
+
+[lib]
+path = "vd.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+# Built inside the launcher's checkout, where this repository is the submodule plugins/vd.
+litelaunch-plugin = { path = "../../sdk" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+# Unwinding stays on: the SDK catches a panic instead of letting it take the launcher down.
+panic = "unwind"
